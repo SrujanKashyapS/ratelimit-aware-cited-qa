@@ -69,7 +69,7 @@ The retriever implements 3 settings:
 ### Load scenarios
 The experiment runner exercises 5 major scenarios:
 
-- `steady`: 15 real requests over ~46 seconds
+- `steady`: approximately 43-46 seconds across runs, depending on live Groq timing and queue behavior
 - `burst`: 45 requests in 3 seconds
 - `sustained_overload`: 60 requests over 20 seconds
 - `limit_halved`: 30 requests with limits halved to simulate constrained budgets
@@ -87,6 +87,8 @@ Intent Router
     |
     v
 Retriever (BM25 + rerank)
+    |
+    +--> weak score / low confidence ? --> broaden query and retry once
     |
     v
 Draft Answer Generator (LLM)
@@ -148,7 +150,7 @@ Each `answer_question(...)` call follows this execution path:
 1. Acquire a semaphore slot to model queue waiting time.
 2. Classify the prompt as in scope or out of scope.
 3. Retrieve passages from the paper library.
-4. If the score is low or the prompt is off-topic, trigger a broader retrieval or a refusal.
+4. If the score is low or the prompt is off-topic, trigger a broader retrieval and a single retry pass.
 5. Generate a draft answer using the retrieved evidence.
 6. Check for citations and grade the response.
 7. Record timing, retries, token usage, queue latency, and outcome.
@@ -284,6 +286,15 @@ This means the system achieved an overall success rate of 24.0% on the combined 
 | `limit_halved` | 30 | 2 | 28 | 0 | 2 | 0 |
 | `daily_exhausted` | 20 | 0 | 20 | 0 | 0 | 0 |
 
+### Findings
+
+The benchmark shows that performance collapsed primarily under quota exhaustion rather than under model reasoning limitations alone.
+
+- In the `sustained_overload` run, the system averaged 1.77 retries per request and 53 of 60 requests were rate-limited, or 88.3% at the 180 RPM operating point.
+- The `S1_150w_k2_no_rerank` setting averaged about 484 tokens per successful answer, while `S3_500w_k6_no_rerank` averaged about 1,824 tokens per successful answer. That is roughly 3.8x more token budget for the larger configuration.
+- The smaller retrieval policy was more robust under rate pressure: it completed all 15 requests successfully and produced 9 correct answers with 5 correct refusals.
+- The larger policy hit 11 rate-limits out of 15 attempts, showing that broader retrieval can be operationally counterproductive when the service is constrained.
+
 ### Latency and robustness notes
 
 For the successful requests in each scenario, the observed latency distribution was:
@@ -312,6 +323,7 @@ This is exactly the type of practical system trade-off the project is designed t
 ```text
 .
 ├── README.md
+├── LICENSE
 ├── check_models.py
 ├── fetch_papers.py
 ├── pipeline.py
@@ -319,35 +331,16 @@ This is exactly the type of practical system trade-off the project is designed t
 ├── retrieval.py
 ├── run_experiments.py
 ├── standin_server.py
-├── update_all.py
-├── update_pipeline_and_runner.py
 ├── data/
 │   └── corpus.json
 └── results.csv
 ```
 
-## Design strengths
-
-This project is useful for interviews and technical discussions because it combines multiple systems concerns:
-
-- LLM orchestration
-- retrieval quality vs latency trade-offs
-- queueing under rate limits
-- API quota modeling
-- citation-aware answer validation
-- failure-mode testing for production-grade AI systems
-
-It demonstrates practical engineering thinking, not just prompt usage.
-
 ## Limitations
 
-This is a research-style, compact benchmark rather than a production-grade distributed service. It intentionally focuses on:
+This is a compact research prototype and benchmark harness rather than a production-grade distributed service. It uses a controlled experiment structure and realistic rate-limit modeling, but the steady-state Groq run should not be expected to reproduce exactly across different API conditions, traffic patterns, and model availability.
 
-- controlled evaluation,
-- reproducible scenarios,
-- and clear observability of the model/tool bottlenecks.
-
-For production use, one would extend this with:
+For practical use, one would extend this with:
 
 - persistent storage,
 - proper logging and tracing,
@@ -357,7 +350,7 @@ For production use, one would extend this with:
 
 ## License
 
-This project is provided as a research / experimentation repository. Use it as a base for learning, benchmarking, and extension.
+This project is licensed under the MIT License. See the `LICENSE` file for the full terms.
 
 ## Contact / project status
 
