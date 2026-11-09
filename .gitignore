@@ -12,8 +12,7 @@ venv/
 .qodo/
 
 # Generated / local data
-results.csv
-*.pdf
+# results.csv is intentionally tracked for benchmark transparency
 *.log
 
 # OS
