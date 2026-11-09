@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+
+# Editor
+.vscode/
+.qodo/
+
+# Generated / local data
+results.csv
+*.pdf
+*.log
+
+# OS
+.DS_Store
